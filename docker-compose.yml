@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: dea-postgres
+    restart: unless-stopped # Auto-restart trừ khi manual stop
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Tuyetanh123}
+      - POSTGRES_DB=${POSTGRES_DB_DEV:-everyday_discipline_dev}
+
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # Persist data tránh mất khi down
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB_DEV:-everyday_discipline_dev}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mongodb:
+    image: mongo:7.0
+    container_name: dea-mongodb
+    restart: unless-stopped
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=deadev
+      - MONGO_INITDB_ROOT_PASSWORD=devpassmongo123
+      - MONGO_INITDB_DATABASE=everyday_discipline_dev
+    ports:
+      - '27018:27017'
+    volumes:
+      - mongo-data:/data/db #Persist data
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    command: ['--auth'] # Enforce authentication để bảo mật
+    healthcheck:
+      test: |
+        mongosh --eval "db.adminCommand('ping')" mongodb://deadev:devpassmongo123@localhost:27017/admin --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: dea-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data # Persist cache nếu cần
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres-data:
+  mongo-data:
+  redis-data:
