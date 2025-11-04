@@ -5,6 +5,8 @@ import { RedisModule } from './redis/redis.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
 import * as Joi from 'joi';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -50,6 +52,14 @@ import * as Joi from 'joi';
         REDIS_URL_PROD: Joi.string()
           .optional()
           .description('Cloud Redis URI for prod'),
+
+        JWT_SECRET: Joi.string().required(),
+        JWT_EXPIRATION: Joi.string().default('7d'),
+        GOOGLE_CLIENT_ID: Joi.string().optional(),
+        GOOGLE_CLIENT_SECRET: Joi.string().optional(),
+        GOOGLE_CALLBACK_URL: Joi.string().optional(),
+        THROTTLE_TTL: Joi.number().default(60),
+        THROTTLE_LIMIT: Joi.number().default(10),
       }),
       validationOptions: {
         allowUnknown: true,
@@ -112,15 +122,32 @@ import * as Joi from 'joi';
           directConnection: true,
           retryAttempts: 3, // Auto-retry on failures
           retryDelay: 3000, // Delay between retries
-          // THÊM DEBUG OPTIONS
           ...(isSrv ? { tls: true, ssl: true } : {}), // Auto TLS cho SRV
         };
       },
       inject: [ConfigService],
     }),
+
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: config.get<number>('THROTTLE_TTL', 60),
+          limit: config.get<number>('THROTTLE_LIMIT', 10),
+        },
+      ],
+    }),
     RedisModule, // Add to global access
     PrismaModule,
     HealthModule,
+  ],
+
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}
